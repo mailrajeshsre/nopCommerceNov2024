@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 using brevo_csharp.Api;
 using brevo_csharp.Client;
@@ -6,7 +7,9 @@ using brevo_csharp.Model;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.Net.Http.Headers;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Nop.Core;
 using Nop.Core.Domain.Localization;
 using Nop.Core.Domain.Messages;
@@ -869,6 +872,62 @@ public partial class BrevoManager
             await _logger.ErrorAsync($"Brevo error: {exception.Message}.", exception, await _workContext.GetCurrentCustomerAsync());
             return (null, false, null, exception.Message);
         }
+    }
+
+    /// <summary>
+    /// Set partner value
+    /// </summary>
+    /// <returns>True if partner successfully set; otherwise false</returns>
+    public async Task<bool> SetPartnerAsync()
+    {
+        try
+        {
+            //whether plugin is configured
+            var brevoSettings = await _settingService.LoadSettingAsync<BrevoSettings>();
+            if (string.IsNullOrEmpty(brevoSettings.ApiKey))
+                return false;
+
+
+            //create API client
+            var httpClient = new HttpClient
+            {
+                //configure client
+                BaseAddress = new Uri(BrevoDefaults.AccountApiUrl),
+                Timeout = TimeSpan.FromSeconds(10),
+            };
+
+            //Default Request Headers needed to be added in the HttpClient Object
+            httpClient.DefaultRequestHeaders.Add(BrevoDefaults.ApiKeyHeader, brevoSettings.ApiKey);
+            httpClient.DefaultRequestHeaders.Add(BrevoDefaults.SibPluginHeader, BrevoDefaults.PluginVersion);
+            httpClient.DefaultRequestHeaders.Add(HeaderNames.UserAgent, BrevoDefaults.UserAgentAccountAPI);
+            httpClient.DefaultRequestHeaders.Add(HeaderNames.Accept, MimeTypes.ApplicationJson);
+
+            var requestObject = new JObject
+            {
+                { "partnerName", BrevoDefaults.PartnerName },
+                { "active", true },
+                { "plugin_version", "1.0.0" },
+                { "shop_version", NopVersion.FULL_VERSION },
+                { "shop_url", _webHelper.GetStoreLocation() },
+                { "created_at", DateTime.UtcNow },
+                { "activated_at", DateTime.UtcNow },
+                { "type", "sib" }
+            };
+
+            var requestString = JsonConvert.SerializeObject(requestObject);
+            var requestContent = new StringContent(requestString, Encoding.Default, MimeTypes.ApplicationJson);
+            var requestMessage = new HttpRequestMessage(HttpMethod.Post, "partner/information") { Content = requestContent };
+            var httpResponse = await httpClient.SendAsync(requestMessage);
+            httpResponse.EnsureSuccessStatusCode();
+        }
+        catch (Exception exception)
+        {
+            //log full error
+            _logger.Error($"Brevo error: {exception.Message}.", exception, await _workContext.GetCurrentCustomerAsync());
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>
