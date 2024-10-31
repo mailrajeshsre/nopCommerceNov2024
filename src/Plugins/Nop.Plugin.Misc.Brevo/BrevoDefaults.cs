@@ -29,9 +29,9 @@ public static class BrevoDefaults
     public static string UserAgentAccountAPI => "sendinblue_plugins/nopcommerce";
 
     /// <summary>
-    /// Gets the plugin version
+    /// Gets the plugin version (only major versions)
     /// </summary>
-    public static string PluginVersion => "4.80.4";
+    public static string PluginVersion => "4.80";
 
     /// <summary>
     /// Gets a URL to edit message template on Brevo account

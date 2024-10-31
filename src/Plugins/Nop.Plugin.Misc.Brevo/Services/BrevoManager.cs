@@ -882,12 +882,36 @@ public partial class BrevoManager
     {
         try
         {
+            var stores = (await _storeService.GetAllStoresAsync()).ToList();
+            var storeCredentials = new Dictionary<string, string>();
+            foreach (var store in stores)
+            {
+                var bSettings = await _settingService.LoadSettingAsync<BrevoSettings>(store.Id);
+                var apiKey = bSettings.ApiKey;
+                if (!string.IsNullOrEmpty(apiKey) && !storeCredentials.Where(s => s.Value == apiKey).Any())
+                    storeCredentials.Add(store.Url, apiKey);
+            }
+
             //whether plugin is configured
-            var brevoSettings = await _settingService.LoadSettingAsync<BrevoSettings>();
-            if (string.IsNullOrEmpty(brevoSettings.ApiKey))
+            if (!storeCredentials.Any())
                 return false;
 
+            foreach (var storeCredential in storeCredentials)
+            {
+                await HttpBrevoClientAsync(storeCredential.Key, storeCredential.Value);
+            }
+        }
+        catch (Exception exception)
+        {
+            //log full error
+            _logger.Error($"Brevo error: {exception.Message}.", exception, await _workContext.GetCurrentCustomerAsync());
+            return false;
+        }
 
+        return true;
+
+        async System.Threading.Tasks.Task HttpBrevoClientAsync(string apiKey, string storeUrl)
+        {
             //create API client
             var httpClient = new HttpClient
             {
@@ -897,7 +921,7 @@ public partial class BrevoManager
             };
 
             //Default Request Headers needed to be added in the HttpClient Object
-            httpClient.DefaultRequestHeaders.Add(BrevoDefaults.ApiKeyHeader, brevoSettings.ApiKey);
+            httpClient.DefaultRequestHeaders.Add(BrevoDefaults.ApiKeyHeader, apiKey);
             httpClient.DefaultRequestHeaders.Add(BrevoDefaults.SibPluginHeader, BrevoDefaults.PluginVersion);
             httpClient.DefaultRequestHeaders.Add(HeaderNames.UserAgent, BrevoDefaults.UserAgentAccountAPI);
             httpClient.DefaultRequestHeaders.Add(HeaderNames.Accept, MimeTypes.ApplicationJson);
@@ -908,7 +932,7 @@ public partial class BrevoManager
                 { "active", true },
                 { "plugin_version", "1.0.0" },
                 { "shop_version", NopVersion.FULL_VERSION },
-                { "shop_url", _webHelper.GetStoreLocation() },
+                { "shop_url", storeUrl },
                 { "created_at", DateTime.UtcNow },
                 { "activated_at", DateTime.UtcNow },
                 { "type", "sib" }
@@ -917,17 +941,10 @@ public partial class BrevoManager
             var requestString = JsonConvert.SerializeObject(requestObject);
             var requestContent = new StringContent(requestString, Encoding.Default, MimeTypes.ApplicationJson);
             var requestMessage = new HttpRequestMessage(HttpMethod.Post, "partner/information") { Content = requestContent };
+
             var httpResponse = await httpClient.SendAsync(requestMessage);
             httpResponse.EnsureSuccessStatusCode();
         }
-        catch (Exception exception)
-        {
-            //log full error
-            _logger.Error($"Brevo error: {exception.Message}.", exception, await _workContext.GetCurrentCustomerAsync());
-            return false;
-        }
-
-        return true;
     }
 
     /// <summary>
