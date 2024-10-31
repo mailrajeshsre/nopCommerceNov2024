@@ -910,7 +910,7 @@ public partial class BrevoManager
 
         return true;
 
-        async System.Threading.Tasks.Task HttpBrevoClientAsync(string apiKey, string storeUrl)
+        async System.Threading.Tasks.Task HttpBrevoClientAsync(string storeUrl, string apiKey)
         {
             //create API client
             var httpClient = new HttpClient
